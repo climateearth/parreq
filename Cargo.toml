@@ -1,0 +1,20 @@
+[package]
+name = "parreq"
+version = "0.1.0"
+edition = "2021"
+authors = ["Zacarías F. Ojeda <zojeda@gmail.com>"]
+description = "Simple program to run several requests in parallel"
+license-file = "LICENSE_MIT.md"
+readme = "README.md"
+
+[dependencies]
+anyhow = "1.0.71"
+clap = { version = "4.3.0", features = ["derive", "cargo"] }
+confique = "0.2.3"
+futures = "0.3.28"
+reqwest = { version = "0.11.18", features = ["serde_json", "json"] }
+serde = "1.0.147"
+serde_json = "1.0.96"
+tokio = { version = "1.28.2", features = ["macros", "rt", "rt-multi-thread"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"]}
