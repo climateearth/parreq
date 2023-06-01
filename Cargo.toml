@@ -12,7 +12,7 @@ anyhow = "1.0.71"
 clap = { version = "4.3.0", features = ["derive", "cargo"] }
 confique = "0.2.3"
 futures = "0.3.28"
-reqwest = { version = "0.11.18", features = ["serde_json", "json"] }
+reqwest = { version = "0.11.18", features = ["serde_json", "json", "hyper-rustls", "rustls-tls-webpki-roots"], default-features = false }
 serde = "1.0.147"
 serde_json = "1.0.96"
 tokio = { version = "1.28.2", features = ["macros", "rt", "rt-multi-thread"] }
