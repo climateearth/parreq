@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf};
 
 use confique::Config;
 use futures::stream::FuturesUnordered;
@@ -8,7 +8,7 @@ mod login;
 mod request;
 use futures::future::join_all;
 use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::Relaxed;
+use std::sync::atomic::Ordering::SeqCst;
 
 use clap::Parser;
 use tracing::{info, Level};
@@ -45,23 +45,24 @@ async fn main() {
     for _ in 1..conf.iterations {
         requests_final.append(&mut conf.requests.clone());
     }
+    
+    let total_requests = requests_final.len();
 
     let batches = batcher::split(&requests_final.into_iter(), conf.concurrect_requests);
     let futures = FuturesUnordered::new();
+    let tasks_per_executor = total_requests / batches.len();
 
     let mut batch_counter: usize = 0;
     for batch in batches {
         let bt = access_token.clone();
-        batch_counter += 1;
         let batch_executor = tokio::spawn(async move {
             let auth = bt.as_str();
+
             let executor_task = &AtomicUsize::new(1);
             let tasks: Vec<_> = batch
                 .map(|req| async {
-                    let current = executor_task.load(Relaxed);
-                    executor_task.store(current + 1, Relaxed);
-
-                    let request = request::Request::new(req, auth, batch_counter, current);
+                    let current = executor_task.fetch_add(1, SeqCst);
+                    let request = request::Request::new(req, auth, batch_counter, tasks_per_executor, current);
                     request.execute().await
                 })
                 .collect();
@@ -71,6 +72,7 @@ async fn main() {
                 task.await;
             }
         });
+        batch_counter += 1;
         futures.push(batch_executor);
     }
     join_all(futures).await;

@@ -9,6 +9,7 @@ readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.71"
+atomic-counter = "1.0.1"
 clap = { version = "4.3.0", features = ["derive", "cargo"] }
 confique = "0.2.3"
 futures = "0.3.28"

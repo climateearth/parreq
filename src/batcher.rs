@@ -44,4 +44,16 @@ mod tests {
         assert_eq!(vec![2, 5], batch1);
         assert_eq!(vec![3], batch2);
     }
+
+        #[test]
+    fn it_should_run_2() {
+        let input = vec![1, 2, 3, 4];
+        let mut splits = split(&input.into_iter(), 2);
+
+        let batch1: Vec<i32> = splits.pop().unwrap().collect();
+        let batch0: Vec<i32> = splits.pop().unwrap().collect();
+
+        assert_eq!(vec![1, 3], batch0);
+        assert_eq!(vec![2, 4], batch1);
+    }
 }
