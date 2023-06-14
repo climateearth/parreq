@@ -1,6 +1,6 @@
 [package]
 name = "parreq"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["Zacarías F. Ojeda <zojeda@gmail.com>"]
 description = "Simple program to run several requests in parallel"

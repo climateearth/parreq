@@ -1,18 +1,20 @@
-use std::{path::PathBuf};
+use std::path::PathBuf;
 
 use confique::Config;
 use futures::stream::FuturesUnordered;
+mod batch_executor;
 mod batcher;
 mod config;
 mod login;
 mod request;
 use futures::future::join_all;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::SeqCst;
 
 use clap::Parser;
-use tracing::{info, Level};
-use tracing_subscriber::FmtSubscriber;
+
+use tracing::info;
+use tracing_subscriber::{filter::LevelFilter, fmt, fmt::format::FmtSpan, prelude::*};
+
+use crate::batch_executor::BatchExecutor;
 
 /// Simple program to run several requests in parallel
 #[derive(Parser, Debug)]
@@ -25,11 +27,17 @@ struct Args {
 
 #[tokio::main]
 async fn main() {
-    let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::INFO)
-        // .with_env_filter("request=debug")
-        .finish();
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    let mut layers = Vec::new();
+    let log = fmt::layer()
+        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        .with_target(true)
+        .with_level(true)
+        .with_filter(LevelFilter::INFO);
+    layers.push(log);
+
+    tracing_subscriber::registry()
+        .with(layers)
+        .init();
 
     let args = Args::parse();
 
@@ -45,36 +53,44 @@ async fn main() {
     for _ in 1..conf.iterations {
         requests_final.append(&mut conf.requests.clone());
     }
-    
+
     let total_requests = requests_final.len();
 
     let batches = batcher::split(&requests_final.into_iter(), conf.concurrect_requests);
     let futures = FuturesUnordered::new();
     let tasks_per_executor = total_requests / batches.len();
 
-    let mut batch_counter: usize = 0;
-    for batch in batches {
-        let bt = access_token.clone();
-        let batch_executor = tokio::spawn(async move {
+    let (tx, rx) = tokio::sync::watch::channel(());
+    batches
+        .iter()
+        .enumerate()
+        .map(|(batch_counter, batch)| {
+            let bt = access_token.clone();
             let auth = bt.as_str();
-
-            let executor_task = &AtomicUsize::new(1);
-            let tasks: Vec<_> = batch
-                .map(|req| async {
-                    let current = executor_task.fetch_add(1, SeqCst);
-                    let request = request::Request::new(req, auth, batch_counter, tasks_per_executor, current);
-                    request.execute().await
+            let tasks: Vec<request::Request> = batch
+                .clone()
+                .enumerate()
+                .map(|(task_in_executor, req)| {
+                    let request = request::Request::new(
+                        req,
+                        auth,
+                        batch_counter,
+                        tasks_per_executor,
+                        task_in_executor + 1,
+                    );
+                    request
                 })
                 .collect();
-
-            #[allow(unused_must_use)]
-            for task in tasks {
-                task.await;
-            }
+            let batch_executor = BatchExecutor::new(batch_counter, tasks);
+            batch_executor
+        })
+        .for_each(|e| {
+            let rx = rx.clone();
+            let join_handle = tokio::spawn(e.start(rx));
+            futures.push(join_handle);
         });
-        batch_counter += 1;
-        futures.push(batch_executor);
-    }
+
+    tx.send(()).expect("error sending start signal");
     join_all(futures).await;
 
     info!("Done!");

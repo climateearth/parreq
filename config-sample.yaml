@@ -9,6 +9,7 @@ concurrect_requests: 3
 iterations: 12
 requests: 
     - action: POST
+      status_code: 200
       url:
       data: {
 
