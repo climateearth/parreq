@@ -1,11 +1,15 @@
-use std::fmt;
-use std::fmt::Debug;
+use std::sync::OnceLock;
+use std::{fmt, fmt::Debug};
 
+use crate::batch_executor::Executable;
 use crate::config::RequestParameters;
-use reqwest::RequestBuilder;
+use async_trait::async_trait;
+use reqwest::{RequestBuilder, StatusCode};
 use serde_json::Value;
 
-use reqwest::header::AUTHORIZATION;
+static DEFAULT_USER_CLIENT: OnceLock<String> = OnceLock::new();
+
+use reqwest::header::{AUTHORIZATION};
 pub struct Request {
     _request_builder: RequestBuilder,
     executor: usize,
@@ -44,47 +48,20 @@ impl Debug for Request {
             .finish()
     }
 }
-impl Request {
-    pub fn new(
-        req: RequestParameters,
-        auth: &str,
-        executor: usize,
-        tasks_per_executor: usize,
-        task_in_executor: usize,
-    ) -> Self {
-        let _auth = "Bearer ".to_owned() + &auth;
-        let client = reqwest::Client::new();
-        let request_number = (executor * tasks_per_executor) + task_in_executor;
 
-        let mut request_builder = match req.action.as_str() {
-            "POST" => client.post(&req.url),
-            "PUT" => client.put(&req.url),
-            "GET" => client.get(&req.url),
-            _ => panic!("action not supported"),
-        };
+#[async_trait]
+impl Executable for Request {
+    type Result = Result<StatusCode, RequestError>;
 
-        let mut data: Option<Value> = None;
-        if let Some(orig_data) = &req.data {
-            let mut req_data_str;
-            req_data_str = orig_data.to_string();
-            req_data_str = req_data_str.replace("{i}", &request_number.to_string());
-            let req_data: Value = serde_json::from_str(&req_data_str).unwrap();
-            request_builder = request_builder
-                .json(&req_data);
-            data = Some(req_data);
-        }
-        Self {
-            _request_builder: request_builder.header(AUTHORIZATION, _auth.clone()),
-            executor,
-            task_in_executor,
-            request_number,
-            data,
-            _status_code: req.status_code,
-        }
-    }
-
-    #[tracing::instrument(err)]
-    pub async fn execute(self) -> Result<(), RequestError> {
+    #[tracing::instrument(err, ret,
+        skip(self),
+        fields(
+            metric_executor_id=self.executor,
+            metric_task_in_executor=self.task_in_executor,
+            metric_request_number=self.request_number
+        )
+    )]
+    async fn execute(self) -> Self::Result {
         // info!("starting request");
         let resp = self._request_builder.send().await;
         // info!("ending request");
@@ -99,13 +76,59 @@ impl Request {
                         );
                         Err(RequestError { msg })
                     } else {
-                        Ok(())
+                        Ok(resp.status())
                     }
                 } else {
-                    Ok(())
+                    Ok(resp.status())
                 }
             }
             Err(e) => Err(e.into()),
         }
     }
+}
+impl Request {
+    pub fn new(
+        req: RequestParameters,
+        auth: &str,
+        executor: usize,
+        tasks_per_executor: usize,
+        task_in_executor: usize,
+        client: &reqwest::Client
+    ) -> Self {
+        DEFAULT_USER_CLIENT.get_or_init(|| {
+            let default_user_agent =
+                format!("{}_v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+            default_user_agent
+        });
+        let _auth = "Bearer ".to_owned() + &auth;
+        // let client = reqwest::Client::new();
+        let request_number = (executor * tasks_per_executor) + task_in_executor;
+
+        let mut request_builder = match req.action.as_str() {
+            "POST" => client.post(&req.url),
+            "PUT" => client.put(&req.url),
+            "GET" => client.get(&req.url),
+            _ => panic!("action not supported"),
+        };
+        // let mut request_builder =
+        //     request_builder.header(USER_AGENT, DEFAULT_USER_CLIENT.get().unwrap());
+        let mut data: Option<Value> = None;
+        if let Some(orig_data) = &req.data {
+            let mut req_data_str;
+            req_data_str = orig_data.to_string();
+            req_data_str = req_data_str.replace("{i}", &request_number.to_string());
+            let req_data: Value = serde_json::from_str(&req_data_str).unwrap();
+            request_builder = request_builder.json(&req_data);
+            data = Some(req_data);
+        }
+        Self {
+            _request_builder: request_builder.header(AUTHORIZATION, _auth.clone()),
+            executor,
+            task_in_executor,
+            request_number,
+            data,
+            _status_code: req.status_code,
+        }
+    }
+
 }
