@@ -29,5 +29,5 @@ pub struct RequestParameters {
     pub url: String,
     pub action: String,
     pub data: Option<Value>,
-    pub status_code: Option<u16>
+    pub status_code: Option<u16>,
 }
