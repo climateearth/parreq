@@ -4,12 +4,12 @@ use std::{fmt, fmt::Debug};
 use crate::batch_executor::Executable;
 use crate::config::RequestParameters;
 use async_trait::async_trait;
+use reqwest::header::AUTHORIZATION;
 use reqwest::{RequestBuilder, StatusCode};
 use serde_json::Value;
 
 static DEFAULT_USER_CLIENT: OnceLock<String> = OnceLock::new();
 
-use reqwest::header::{AUTHORIZATION};
 pub struct Request {
     _request_builder: RequestBuilder,
     executor: usize,
@@ -104,22 +104,16 @@ impl Request {
         // let client = reqwest::Client::new();
         let request_number = (executor * tasks_per_executor) + task_in_executor;
 
-        let mut request_builder = match req.action.as_str() {
+        let request_builder = match req.action.as_str() {
             "POST" => client.post(&req.url),
             "PUT" => client.put(&req.url),
             "GET" => client.get(&req.url),
             _ => panic!("action not supported"),
         };
-        // let mut request_builder =
-        //     request_builder.header(USER_AGENT, DEFAULT_USER_CLIENT.get().unwrap());
+
         let mut data: Option<Value> = None;
-        if let Some(orig_data) = &req.data {
-            let mut req_data_str;
-            req_data_str = orig_data.to_string();
-            req_data_str = req_data_str.replace("{i}", &request_number.to_string());
-            let req_data: Value = serde_json::from_str(&req_data_str).unwrap();
-            request_builder = request_builder.json(&req_data);
-            data = Some(req_data);
+        if let Some(orig_data) = req.data {
+            data = Some(orig_data);
         }
         Self {
             _request_builder: request_builder.header(AUTHORIZATION, _auth.clone()),

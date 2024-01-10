@@ -3,7 +3,7 @@ name = "parreq"
 version = "0.2.0"
 edition = "2021"
 authors = ["Zacarías F. Ojeda <zojeda@gmail.com>"]
-description = "Simple program to run several requests in parallel"
+description = "Simple program to run several requests in parallel (with authentication)"
 license-file = "LICENSE_MIT.md"
 readme = "README.md"
 

@@ -26,11 +26,11 @@ use tracing_subscriber::{fmt, prelude::*};
 
 use crate::batch_executor::BatchExecutor;
 
-/// Simple program to run several requests in parallel
+/// Simple program to run several requests in parallel using authentication
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Display logs in standard output
+    /// Display logs on standard output
     #[arg(short, long, default_value_t = false)]
     verbose_output: bool,
     /// Config file with authentication and request entries [default: config.yaml]
@@ -110,15 +110,13 @@ fn create_executors(
         .into_iter()
         .enumerate()
         .map(|(batch_counter, batch)| {
-            let bt = access_token.clone();
-            let auth = bt;
             let start = Instant::now();
             let tasks = batch
                 .enumerate()
                 .map(|(task_in_executor, req)| {
                     let request = request::Request::new(
                         req,
-                        auth,
+                        access_token,
                         batch_counter,
                         tasks_per_executor,
                         task_in_executor + 1,
